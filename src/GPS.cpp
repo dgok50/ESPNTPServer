@@ -162,7 +162,7 @@ void GPS::process()
                 _nmea_timer.attach_ms(NMEA_TIMER_MS, _timer_handler, &_nmea_timeout);
             }
 
-            if (_nmea.isValid() && _nmea.getNumSatellites() >= 4)
+            if (_nmea.isValid() && _nmea.getNumSatellites() >= 3)
             {
                 //
                 // if gps was not valid, it is now

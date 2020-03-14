@@ -29,9 +29,9 @@ WiFiSetup::WiFiSetup(Config& config, Display& display, Stream& serial, boolean d
 : _config(config),
   _display(display),
   _wm(serial),
-  _ota_url("ota_url", "OTA URL",         "", 128),
-  _ota_fp("ota_fp",   "OTA Fingerprint", "", 64),
-  _syslog_host("syslog_host", "Syslog Host", "", 64),
+  _ota_url("ota_url", "OTA URL",         "http://dev.a1mc.ru/rom/esp8266/ntpserv/", 128),
+  _ota_fp("ota_fp",   "OTA Fingerprint", "-", 64),
+  _syslog_host("syslog_host", "Syslog Host", "192.168.0.107", 64),
   _syslog_port("syslog_port", "Syslog Port", "514", 8),
   _devicename(devicename)
 {
@@ -39,6 +39,7 @@ WiFiSetup::WiFiSetup(Config& config, Display& display, Stream& serial, boolean d
 
     using namespace std::placeholders;
     _wm.setAPCallback(std::bind(&WiFiSetup::startingPortal, this, _1));
+   //yield();
     _wm.setSaveConfigCallback(std::bind(&WiFiSetup::saveConfig, this));
 }
 
@@ -91,14 +92,16 @@ void WiFiSetup::startingPortal(WiFiManager* wmp)
     //
     dlog.info(TAG, F("startingPortal: updating display"));
     _display.message("SSID: %s", _wm.getConfigPortalSSID().c_str());
+    yield();
+    return;
 }
 
 void WiFiSetup::saveConfig()
 {
-    dlog.info(TAG, "saveConfig: updating values");
+    dlog.info(TAG,  F("saveConfig: updating values"));
     _config.setSyslogHost(_syslog_host.getValue());
     _config.setSyslogPort(atoi(_syslog_port.getValue()));
-    dlog.debug(TAG, "saveConfig: saving!");
+    dlog.debug(TAG,  F("saveConfig: saving!"));
     _config.save();
 }
 

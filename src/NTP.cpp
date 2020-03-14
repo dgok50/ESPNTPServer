@@ -63,7 +63,7 @@ typedef struct ntp_packet
 
 #define NTP_VERSION     4
 
-#define REF_ID          "PPS "  // "GPS " when we have one!
+#define REF_ID          "GPS "  // "GPS " when we have one!
 
 #define setLI(value)    ((value&0x03)<<6)
 #define setVERS(value)  ((value&0x07)<<3)
@@ -200,7 +200,7 @@ void NTP::ntp(AsyncUDPPacket& aup)
     ntp.precision  = _precision;
     // TODO: compute actual root delay, and root dispersion
     ntp.delay = 1;      //(uint32)(0.000001 * 65536.0);
-    ntp.dispersion = 1; //(uint32_t)(_gps.getDispersion() * 65536.0); // TODO: pre-calculate this?
+    ntp.dispersion = (uint32_t)(_gps.getDispersion() * 65536.0); // TODO: pre-calculate this?
     strncpy((char*)ntp.ref_id, REF_ID, sizeof(ntp.ref_id));
     ntp.orig_time  = ntp.xmit_time;
     ntp.recv_time  = recv_time;

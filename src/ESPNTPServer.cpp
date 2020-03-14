@@ -161,6 +161,7 @@ void setup()
 
     dlog.info(SETUP_TAG, F("initializing GPS"));
     display.message("Starting GPS");
+    display.message(__TIME__ " " __DATE__);
     gps.begin();
     display.process();
 
