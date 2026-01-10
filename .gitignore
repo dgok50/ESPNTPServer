@@ -8,3 +8,4 @@ ESPNTPServer.code-workspace
 eagle/ESPNTPServer/ESPNTPServer.b#*
 eagle/ESPNTPServer/ESPNTPServer.s#*
 eagle/ESPNTPServer/ESPNTPServer_*.zip
+_codeql_detected_source_root
