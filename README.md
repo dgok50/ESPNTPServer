@@ -1,8 +1,18 @@
 # ESPNTPServer
 
-GPS fueled ESP8266 based NTP Server
+GPS fueled ESP8266 based NTP Server with Legacy Time Protocol Support
 
 [![Build Status](https://travis-ci.org/liebman/ESPNTPServer.svg?branch=master)](https://travis-ci.org/liebman/ESPNTPServer)
+
+## Features
+
+- **NTP Server** (Port 123): Full NTPv4 server implementation
+- **Time Protocol** (Port 37, RFC 868): Legacy time protocol returning 32-bit timestamp
+- **Daytime Protocol** (Port 13, RFC 867): Human-readable date/time for testing
+
+All protocols use GPS time source for high accuracy.
+
+## Contents
 
 [src](src) Contains the code for the NTP Server
 
