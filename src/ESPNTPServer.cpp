@@ -29,12 +29,14 @@
 
 #include "GPS.h"
 #include "NTP.h"
+#include "LTPS.h"
 #include "Display.h"
 #include "Config.h"
 
 DLog& dlog = DLog::getLog();
 GPS gps(Serial, SYNC_PIN);
 NTP ntp(gps);
+LTPS ltps(gps);
 Display display(gps, ntp, SDA_PIN, SCL_PIN);
 Config config;
 
@@ -228,6 +230,9 @@ void setup()
 
     dlog.info(SETUP_TAG, F("initializing NTP"));
     ntp.begin();
+    
+    dlog.info(SETUP_TAG, F("initializing LTPS (Legacy Time Protocols)"));
+    ltps.begin();
 }
 
 void loop()
