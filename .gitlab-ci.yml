@@ -1,0 +1,93 @@
+stages:
+  - validate
+  - build
+  - deploy
+
+default:
+  tags:
+    - shell
+  interruptible: true
+
+variables:
+  PLATFORMIO_CORE_DIR: "$CI_PROJECT_DIR/.platformio"
+  PLATFORMIO_BUILD_DIR: "$CI_PROJECT_DIR/.pio/build/$CI_JOB_ID"
+  PLATFORMIO_LIBDEPS_DIR: "$CI_PROJECT_DIR/.pio/libdeps"
+  PLATFORMIO_SETTING_ENABLE_TELEMETRY: "no"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.platformio/pip-cache"
+
+.platformio:
+  cache:
+    key: "platformio-${CI_PROJECT_ID}-${CI_RUNNER_ID}"
+    when: always
+    paths:
+      - .platformio/
+      - .pio/libdeps/
+  before_script:
+    - python3 -m venv "$CI_PROJECT_DIR/.pio-ci"
+    - . "$CI_PROJECT_DIR/.pio-ci/bin/activate"
+    - python -m pip install --disable-pip-version-check "platformio==6.1.19" "esptool==4.11.0"
+
+validate:
+  stage: validate
+  extends: .platformio
+  script:
+    - python -m pip install --disable-pip-version-check "yamllint==1.37.1"
+    - "yamllint -d '{extends: relaxed, rules: {line-length: disable}}' .gitlab-ci.yml"
+    - bash -n tools/deploy_ota.sh
+    - python3 -m py_compile tools/write_deployment_defaults.py
+    - git diff-tree --check "$CI_COMMIT_SHA^" "$CI_COMMIT_SHA"
+
+build:
+  stage: build
+  extends: .platformio
+  resource_group: platformio
+  script:
+    - if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then python3 tools/write_deployment_defaults.py; fi
+    - pio run -e default
+    - cp "$PLATFORMIO_BUILD_DIR/default/firmware.bin" firmware.bin
+    - test "$(stat --printf='%s' firmware.bin)" -le 1044464
+    - python -m esptool image_info firmware.bin
+    - md5sum firmware.bin | tee firmware.bin.md5
+    - sha256sum firmware.bin | tee firmware.bin.sha256
+    - printf 'FIRMWARE_SIZE=%s\n' "$(stat --printf='%s' firmware.bin)" > firmware.env
+    - printf 'FIRMWARE_MD5=%s\n' "$(cut -d' ' -f1 firmware.bin.md5)" >> firmware.env
+    - printf 'FIRMWARE_SHA256=%s\n' "$(cut -d' ' -f1 firmware.bin.sha256)" >> firmware.env
+  artifacts:
+    paths:
+      - firmware.bin
+      - firmware.bin.md5
+      - firmware.bin.sha256
+    reports:
+      dotenv: firmware.env
+    expire_in: 7 weeks
+
+deploy_ota:
+  stage: deploy
+  needs:
+    - job: build
+      artifacts: true
+  resource_group: espntp-ota-production
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  before_script:
+    - test -n "$FW_SERVER"
+    - test -n "$PRIVATE_KEY"
+    - test -n "$OTA_REMOTE_DIR"
+    - test -n "$OTA_REMOTE_DIR_SHA256"
+    - test -n "$OTA_SSH_USER"
+    - test -n "$OTA_SSH_PORT"
+    - test -n "$OTA_URL"
+    - test -n "$OTA_HOST_KEY"
+    - test -n "$OTA_VERIFY_HOST"
+    - test -n "$OTA_VERIFY_PATH"
+    - install -d -m 0700 "$HOME/.ssh"
+    - printf '%s\n' "$OTA_HOST_KEY" > "$HOME/.ssh/known_hosts"
+    - chmod 0600 "$HOME/.ssh/known_hosts"
+    - eval "$(ssh-agent -s)"
+    - ssh-add <(printf '%s\n' "$PRIVATE_KEY")
+  script:
+    - tools/deploy_ota.sh firmware.bin
+  environment:
+    name: production/ota
+    url: "$OTA_URL"
+    deployment_tier: production

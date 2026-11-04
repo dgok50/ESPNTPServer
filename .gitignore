@@ -1,0 +1,14 @@
+.DS_Store
+ESPNTPServer.code-workspace
+*.bak
+*-bak
+.pio
+.vscode
+/data
+/AGENTS.local.md
+/output/
+/tools/__pycache__/
+eagle/ESPNTPServer/ESPNTPServer.b#*
+eagle/ESPNTPServer/ESPNTPServer.s#*
+eagle/ESPNTPServer/ESPNTPServer_*.zip
+_codeql_detected_source_root
