@@ -69,10 +69,10 @@ The complete listener/transport map and wire formats are in
 - NTP v3/v4: UDP 123, 48-byte server response, stratum 1, reference ID `GPS `.
 - RFC 867 Daytime: TCP and UDP 13, human-readable UTC line.
 - RFC 868 Time: TCP and UDP 37, exactly four big-endian 1900-epoch bytes.
-- All time services stay silent until GPS time and PPS have been continuously
-  valid for `VALID_DELAY` (currently 60 seconds). A GPS or PPS outage restarts
-  the full countdown. This is separate from the roughly one-second PPS-loss
-  detector.
+- All time services stay silent until a valid GNSS fix, confirmed RMC UTC,
+  and the first subsequent PPS edge. There is no fixed startup or recovery
+  delay. A GPS or PPS outage makes service silent again; the roughly
+  one-second PPS-loss detector remains separate.
 - The PPS ISR captures `micros()` immediately and stays IRAM-only. NTP uses
   raw lwIP UDP, captures T2 at callback entry and T3 immediately before send,
   and advertises a conservative 5 ms software-timestamp uncertainty floor.
@@ -131,8 +131,9 @@ After installation or a protocol change:
 
 1. Fetch diagnostics. Confirm version/hash, reset reason, heap, Wi-Fi,
    `gps_input_valid`, `gps_pps_valid`, satellite count, and timeout counters.
-2. Wait for `gps_valid_delay_s=0` and `gps_valid=true` after continuous GPS/PPS
-   validity. If PPS is lost, restart the waiting period.
+2. Confirm `gps_valid=true` on the first PPS edge after valid GNSS input and
+   confirmed RMC UTC. `gps_valid_delay_s` remains zero. A GPS/PPS outage must
+   make all time services silent until reacquisition.
 3. Test NTP UDP/123: 48-byte v3/v4 server reply, stratum 1, reference ID,
    matching origin, recent PPS reference timestamp, and non-zero dispersion.
 4. Test RFC 867 on TCP and UDP 13 for UTC text; test RFC 868 on TCP and UDP 37

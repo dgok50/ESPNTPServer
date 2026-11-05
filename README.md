@@ -2,7 +2,7 @@
 
 GPS-synchronized ESP8266 time server with legacy time protocols and NMEA output.
 
-The deployed debug build is `1.3.5-debug`. See [the protocol reference](docs/PROTOCOLS.md)
+The current debug build is `1.3.7-debug`. See [the protocol reference](docs/PROTOCOLS.md)
 for wire formats, availability rules, discovery, management routes, and tests.
 
 ## Features
@@ -24,10 +24,10 @@ optional UDP syslog to a configured host. These are not additional public
 time-service listeners. The temporary Wi-Fi configuration portal is separate
 from the normal management API. Details are in the [protocol reference](docs/PROTOCOLS.md).
 
-All time protocols use the GPS time source for high accuracy. They remain
-silent until GPS time and PPS have been continuously valid for 60 seconds
-after startup or a PPS interruption. Network NMEA is not subject to this
-time-service delay.
+All time protocols use the GPS time source for high accuracy. There is no
+fixed startup or recovery delay: they become available on the first PPS edge
+after valid GNSS input and confirmed UTC time from RMC. They become silent
+again when GNSS input or PPS is lost. Network NMEA has its own fix filter.
 
 The GPS PPS signal on GPIO12/D6 is captured by a minimal IRAM interrupt
 handler. NTP uses the raw lwIP UDP API so receive and transmit timestamps are
@@ -90,7 +90,7 @@ the device's local IP subnet.
 - `POST /ota` schedules a reboot and therefore an immediate OTA check during
   startup. The request must contain `X-OTA-Confirm: reboot`; the custom header
   also prevents a normal cross-origin browser form from triggering a reboot.
-- The temporary `1.3.5-debug` build exposes `POST /debug/ubx` and
+- The temporary `1.3.7-debug` build exposes `POST /debug/ubx` and
   `GET /debug/ubx` for arbitrary checked UBX frames and matching responses.
   It has no password or HTTPS and is restricted only to the device's local
   subnet. Do not use this image on an untrusted network.

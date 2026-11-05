@@ -55,7 +55,6 @@ GPS::GPS(Stream& gps_stream, int pps_pin) :
     _last_micros(0),
     _pps_pin(pps_pin),
     _processed_pps_count(0),
-    _valid_delay(0),
     _valid_count(0),
     _timeouts(0),
     _last_rmc_micros(0),
@@ -64,6 +63,7 @@ GPS::GPS(Stream& gps_stream, int pps_pin) :
     _valid(false),
     _pps_timed_out(true),
     _rmc_initialized(false),
+    _rmc_time_ready(false),
     _sentence_handler(nullptr),
     _sentence_handler_arg(nullptr)
 {
@@ -202,8 +202,10 @@ void GPS::process()
             dlog.debug(TAG, F("'%s'"), _nmea.getSentence());
 
             const char* sentence = _nmea.getSentence();
+            const bool checksum_valid = sentence[0] == '$' &&
+                    MicroNMEA::testChecksum(sentence);
             if (_sentence_handler != nullptr && sentence[0] == '$' &&
-                    MicroNMEA::testChecksum(sentence))
+                    checksum_valid)
             {
                 _sentence_handler(_sentence_handler_arg, sentence);
             }
@@ -213,55 +215,75 @@ void GPS::process()
             //
             // if it was a RMC and its valid then check and maybe update the time
             //
-            if (_nmea.getYear() > 2017 && strcmp("RMC", id) == 0)
+            if (checksum_valid && strcmp("RMC", id) == 0)
             {
-                struct tm tm;
-                memset(&tm, 0, sizeof(tm));
-                tm.tm_year  = _nmea.getYear() - 1900;
-                tm.tm_mon   = _nmea.getMonth() - 1;
-                tm.tm_mday  = _nmea.getDay();
-                tm.tm_hour  = _nmea.getHour();
-                tm.tm_min   = _nmea.getMinute();
-                tm.tm_sec   = _nmea.getSecond();
-                tm.tm_isdst = 0;
-                time_t new_seconds = mktime(&tm);
-
-                // Ignore the first mismatch after an RMC gap. A continuous
-                // RMC stream is safe to use to label the PPS-driven seconds;
-                // the 60-second validity delay hides any correction.
-                const uint32_t cur_micros = micros();
-                const bool continuous_rmc = _rmc_initialized &&
-                        cur_micros - _last_rmc_micros <= NMEA_TIMEOUT_US;
-                _last_rmc_micros = cur_micros;
-
-                time_t old_seconds;
-                bool adjusted = false;
+                if (_nmea.getYear() <= 2017)
                 {
-                    esp8266::InterruptLock lock;
-                    old_seconds = _seconds;
-                    if (old_seconds != new_seconds &&
-                            (!_rmc_initialized || continuous_rmc))
+                    _rmc_time_ready = false;
+                }
+                else
+                {
+                    struct tm tm;
+                    memset(&tm, 0, sizeof(tm));
+                    tm.tm_year  = _nmea.getYear() - 1900;
+                    tm.tm_mon   = _nmea.getMonth() - 1;
+                    tm.tm_mday  = _nmea.getDay();
+                    tm.tm_hour  = _nmea.getHour();
+                    tm.tm_min   = _nmea.getMinute();
+                    tm.tm_sec   = _nmea.getSecond();
+                    tm.tm_isdst = 0;
+                    time_t new_seconds = mktime(&tm);
+
+                    // Ignore the first mismatch after an RMC gap. Do not serve
+                    // time until an RMC has actually confirmed the UTC seconds.
+                    const uint32_t cur_micros = micros();
+                    const bool continuous_rmc = _rmc_initialized &&
+                            cur_micros - _last_rmc_micros <= NMEA_TIMEOUT_US;
+                    _last_rmc_micros = cur_micros;
+
+                    time_t old_seconds;
+                    bool adjusted = false;
                     {
-                        _seconds = new_seconds;
-                        adjusted = true;
+                        esp8266::InterruptLock lock;
+                        old_seconds = _seconds;
+                        if (old_seconds != new_seconds &&
+                                (!_rmc_initialized || continuous_rmc))
+                        {
+                            _seconds = new_seconds;
+                            adjusted = true;
+                        }
                     }
-                }
 
-                if (adjusted)
-                {
-                    invalidate("seconds adjusted from %lu to %lu", old_seconds, new_seconds);
-                    dlog.info(TAG, F("adjusting seconds from %lu to %lu from:'%s'"),
-                            old_seconds, new_seconds, _nmea.getSentence());
+                    if (adjusted)
+                    {
+                        invalidate("seconds adjusted from %lu to %lu", old_seconds, new_seconds);
+                        dlog.info(TAG, F("adjusting seconds from %lu to %lu from:'%s'"),
+                                old_seconds, new_seconds, _nmea.getSentence());
+                    }
+                    else if (old_seconds != new_seconds)
+                    {
+                        dlog.debug(TAG, F("ignoring first RMC after a gap: '%s'"),
+                                _nmea.getSentence());
+                    }
+                    const bool time_ready = _nmea.isValid() &&
+                            (adjusted || old_seconds == new_seconds);
+                    if (time_ready && !_rmc_time_ready)
+                    {
+                        // Require a PPS edge strictly after UTC confirmation.
+                        esp8266::InterruptLock lock;
+                        _processed_pps_count = _pps_count;
+                    }
+                    _rmc_time_ready = time_ready;
+                    _rmc_initialized = true;
                 }
-                else if (old_seconds != new_seconds)
-                {
-                    dlog.debug(TAG, F("ignoring first RMC after a gap: '%s'"),
-                            _nmea.getSentence());
-                }
-                _rmc_initialized = true;
             }
 
-            if (_nmea.isValid() && _nmea.getNumSatellites() >= 3)
+            const bool fix_sentence = checksum_valid &&
+                    (strcmp("GGA", id) == 0 || strcmp("RMC", id) == 0);
+            if (!fix_sentence) continue;
+
+            if (_rmc_time_ready && _nmea.isValid() &&
+                    _nmea.getNumSatellites() >= 3)
             {
                 //
                 // if gps was not valid, it is now
@@ -269,20 +291,18 @@ void GPS::process()
                 if (!_gps_valid)
                 {
                     {
-                        // Only PPS edges strictly after this valid NMEA fix
-                        // count toward the continuous validation interval.
+                        // The next PPS edge is the earliest usable time edge.
                         esp8266::InterruptLock lock;
                         _processed_pps_count = _pps_count;
                     }
-                    _valid_delay = VALID_DELAY;
                     _gps_valid = true;
                     _valid = false;
                     dlog.info(TAG, F("GPS valid!"));
                 }
             }
-            else /* nmea not valid or sat count < 4 */
+            else /* no confirmed time, valid fix, or enough satellites */
             {
-                if (_gps_valid || _valid_delay)
+                if (_gps_valid)
                 {
                     invalidate("NMEA:%s SATS:%d from: '%s'",
                             _nmea.isValid() ? "valid" : "invalid",
@@ -413,7 +433,7 @@ void GPS::invalidate(const char* fmt, ...)
     }
     _valid       = false;
     _gps_valid   = false;
-    _valid_delay = 0;
+    _rmc_time_ready = false;
 }
 
 void GPS::processPPS()
@@ -435,31 +455,16 @@ void GPS::processPPS()
         if (_pps_timed_out)
         {
             _pps_timed_out = false;
-            new_pulses = 1;
-            if (_gps_valid)
-            {
-                _valid = false;
-                _valid_delay = VALID_DELAY;
-            }
         }
 
-        if (_gps_valid && _valid_delay != 0)
+        if (_gps_valid && _rmc_time_ready && !_valid)
         {
-            if (new_pulses >= _valid_delay)
-            {
-                const uint32_t extra_pulses = new_pulses - _valid_delay;
-                _valid_delay = 0;
-                _valid = true;
-                _valid_since = seconds - extra_pulses;
-                ++_valid_count;
-                esp8266::InterruptLock lock;
-                _min_micros = 0;
-                _max_micros = 0;
-            }
-            else
-            {
-                _valid_delay -= new_pulses;
-            }
+            _valid = true;
+            _valid_since = seconds;
+            ++_valid_count;
+            esp8266::InterruptLock lock;
+            _min_micros = 0;
+            _max_micros = 0;
         }
     }
 
@@ -469,7 +474,7 @@ void GPS::processPPS()
         _pps_timed_out = true;
         ++_timeouts;
         _valid = false;
-        _valid_delay = _gps_valid ? VALID_DELAY : 0;
+        _rmc_time_ready = false;
         setReason("PPS timeout");
     }
 }

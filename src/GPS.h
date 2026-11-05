@@ -27,7 +27,6 @@
 
 #define REASON_SIZE       128
 #define NMEA_BUFFER_SIZE  250
-#define VALID_DELAY       60   // continuous GPS/PPS seconds before time service
 #define PPS_TIMEOUT_US    1001000UL
 #define NMEA_TIMEOUT_US   1100000UL
 
@@ -58,7 +57,7 @@ public:
     uint32_t getJitter();
     uint32_t getDispersionMicros();
     uint32_t getValidCount() const { return _valid_count; }
-    uint32_t getValidDelay() const { return _valid_delay; }
+    uint32_t getValidDelay() const { return 0; } // retained diagnostics field
     uint32_t getPPSTimeoutCount() const { return _timeouts; }
     uint32_t getPPSAgeMicros();
     void     pollVersionIfNeeded();
@@ -132,7 +131,6 @@ private:
 
     uint8_t           _pps_pin;
     uint32_t          _processed_pps_count;
-    uint32_t          _valid_delay;
     uint32_t          _valid_count;
     uint32_t          _timeouts;
     uint32_t          _last_rmc_micros;
@@ -141,6 +139,7 @@ private:
     volatile bool     _valid;
     bool              _pps_timed_out;
     bool              _rmc_initialized;
+    bool              _rmc_time_ready;
     SentenceHandler   _sentence_handler;
     void*             _sentence_handler_arg;
     char              _reason[REASON_SIZE];

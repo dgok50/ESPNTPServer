@@ -1,6 +1,6 @@
 # ESPNTPServer protocol reference
 
-This describes the implemented interfaces in firmware `1.3.5-debug`. It is a
+This describes the implemented interfaces in firmware `1.3.7-debug`. It is a
 snapshot of the code, not a claim that every interface is always reachable:
 Wi-Fi, GPS input, PPS, and network conditions determine live availability.
 The debug-only UBX route is deliberately not a production security design.
@@ -9,7 +9,7 @@ The debug-only UBX route is deliberately not a production security design.
 
 | Interface | Direction | Transport and port | Availability |
 | --- | --- | --- | --- |
-| NTP v3/v4 | Client to device | UDP 123 | After 60 continuous seconds of valid GPS time and PPS |
+| NTP v3/v4 | Client to device | UDP 123 | First PPS after valid GNSS fix and confirmed RMC UTC |
 | RFC 867 Daytime | Client to device | TCP/UDP 13 | Same time-validity gate |
 | RFC 868 Time | Client to device | TCP/UDP 37 | Same time-validity gate |
 | NMEA 0183 stream | Device to local clients | TCP 10110 | With checksum-valid GGA/RMC and usable fix |
@@ -28,10 +28,12 @@ configuration for *any* client on the local subnet.
 
 ## Time services
 
-`gps_valid` becomes true only after GPS time and the PPS input have both been
-continuously valid for 60 seconds. The countdown restarts after a PPS or GPS
-validity loss. The PPS-loss detector itself is separate (about one second);
-the 60 seconds are a safety delay before serving time, not a network timeout.
+`gps_valid` becomes true on the first PPS edge following a checksum-valid,
+usable fix and confirmed RMC UTC. There is no fixed startup or recovery delay.
+The first mismatched RMC after a gap is not trusted until a continuous RMC
+confirms/corrects it. The PPS-loss detector remains about one second, and any
+GPS input or PPS outage makes time service silent until these conditions recur.
+`gps_valid_delay_s` is retained for compatibility and now always reads zero.
 Until `gps_valid=true`, NTP and both RFC 867/868 transports deliberately give
 no time response. NMEA output uses its own fix filter and does not wait for this
 time-service delay.
@@ -114,7 +116,7 @@ optional certificate store. Without either, the current code explicitly falls
 back to an insecure HTTPS connection; do not assume HTTPS alone authenticates
 the OTA server.
 
-The `1.3.6-debug` build additionally exposes these experimental routes:
+The `1.3.7-debug` build additionally exposes these experimental routes:
 
 | Request | Result |
 | --- | --- |
