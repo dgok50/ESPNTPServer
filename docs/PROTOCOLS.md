@@ -114,7 +114,7 @@ optional certificate store. Without either, the current code explicitly falls
 back to an insecure HTTPS connection; do not assume HTTPS alone authenticates
 the OTA server.
 
-The `1.3.5-debug` build additionally exposes these experimental routes:
+The `1.3.6-debug` build additionally exposes these experimental routes:
 
 | Request | Result |
 | --- | --- |
@@ -128,12 +128,19 @@ both read and write UBX commands. There is intentionally **no password, key,
 HTTPS, or per-command permission check** in this temporary build. Never expose
 it to an untrusted subnet. Use `tools/ubx_debug.py --host <device-ip> --inventory` for read-only
 polls; `--send` can change module settings and should be used deliberately.
+Queued UBX commands and their two-second timeout continue to run even without
+a GNSS fix or PPS. When PPS is valid, UART commands remain deferred to the
+latter half of the PPS second.
 
 Cached GNSS diagnostic fields include MON-HW interference/antenna state,
 NAV-PVT fix and time accuracy, NAV-DOP, NAV-SVINFO signal summaries, and MON-IO
 UART1 errors. They are periodically emitted by the receiver and cached by the
 ESP; viewing `/diagnostics.txt` does not poll the module. Check each `*_age_ms`
 before interpreting it. `unavailable` or `unknown` is not an all-clear.
+The `gps_svinfo_gps_*` aggregates count GPS satellite IDs only. In a
+GLONASS-only receiver test they can correctly read zero while GLONASS
+channels are visible; poll `NAV-SVINFO` through the debug bridge to inspect
+those channels.
 
 ## Other links and operational checks
 

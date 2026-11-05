@@ -115,7 +115,9 @@ checked UBX request/response frames. It intentionally has no password, key,
 HTTPS, or command policy beyond the local-subnet restriction. A local client
 can change receiver settings. Keep it only on a trusted network and remove the
 flag before a normal production image. `tools/ubx_debug.py --inventory` is
-read-only; arbitrary `--send` commands require care.
+read-only; arbitrary `--send` commands require care. In debug builds, queued
+UBX commands must still be processed without a GNSS fix or PPS; with PPS,
+keep their UART writes in the latter half of the second.
 
 Receiver MON-HW, NAV-PVT, NAV-DOP, NAV-SVINFO, and MON-IO data are cached from
 periodic UART output. HTTP diagnostics do not poll the receiver. Check each

@@ -8,7 +8,7 @@
 #ifndef ESPNTPSERVERVERSION_H_
 #define ESPNTPSERVERVERSION_H_
 
-static const char ESPNTP_SERVER_VERSION[] = "1.3.5-debug";
+static const char ESPNTP_SERVER_VERSION[] = "1.3.6-debug";
 
 
 #endif /* ESPNTPSERVERVERSION_H_ */

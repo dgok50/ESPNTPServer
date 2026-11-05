@@ -731,6 +731,14 @@ void loop()
 #endif
         nmeaService.process();
     }
+#ifdef UBX_DEBUG_API
+    else if (!gps.isPPSValid())
+    {
+        // Keep receiver control alive when PPS is absent. After a long PPS
+        // outage tv_usec can leave the normal second range entirely.
+        gps.processUBXCommand();
+    }
+#endif
 
     // Keep display I2C traffic, status logging, and optional UDP syslog away
     // from the PPS edge. They can delay delivery of an NTP packet to lwIP even
